@@ -17,93 +17,83 @@ v-model="searchTerm"
         type="text" placeholder="Search">
       <button
 class="p-2 px-3 rounded-r-lg bg-stone-600"
+:class="loading? 'pointer-events-none opacity-50':''"
         type="submit">Search</button>
     </form>
 
   </div>
+ <button
+class="my-6 p-2 px-3 rounded-lg bg-stone-600 self-center col-span-4 col-start-5"
+ :class="results.length? '':'opacity-50 pointer-events-none'"
 
+
+ @click="downloadResultsAsJson">
+      Download JSON
+    </button>
   <div
-class="flex col-span-12 p-12"
+class="flex col-span-12 m-6"
       :class="(token.length !==32)?'opacity-50 pointer-events-none':''">
     <!-- <div v-for="(r,i) in results" :key="(r.id ?? i)">
     <pre>{{r}}</pre></div> -->
-    <table class="w-full overflow-hidden divide-y rounded-md divide-stone-700">
-      <thead class="">
-        <tr>
-          <th
-scope="col"
-            class="sticky top-0 z-10 bg-black/60 backdrop-blur-lg py-3.5 pl-4 pr-3 text-left text-sm font-semibold text-stone-100 sm:pl-6">
-            JmenoPrijemce</th>
-          <th
-scope="col"
-            class="sticky top-0 z-10 bg-black/60 backdrop-blur-lg py-3.5 pl-4 pr-3 text-left text-sm font-semibold text-stone-100 sm:pl-6">
-            Ico</th>
-          <th
-scope="col"
-            class="sticky top-0 z-10 bg-black/60 backdrop-blur-lg px-3 py-3.5 text-left text-sm font-semibold text-stone-100">
-            PodporaCzk</th>
-          <th
-scope="col"
-            class="sticky top-0 z-10 bg-black/60 backdrop-blur-lg px-3 py-3.5 text-left text-sm font-semibold text-stone-100">
-            PodporaEur</th>
-          <th
-scope="col"
-            class="sticky top-0 z-10 bg-black/60 backdrop-blur-lg px-3 py-3.5 text-left text-sm font-semibold text-stone-100">
-            PodporaDatum</th>
+    <OutputTable :results="results" />
 
-        </tr>
-      </thead>
-      <tbody class="divide-y divide-stone-800 bg-stone-900">
-        <tr v-for="(r,i) in results" :key="(r.id ?? i)">
-          <td
-            class="max-w-xs py-4 pl-4 pr-3 text-sm font-medium text-stone-100 whitespace-nowrap sm:pl-6">
-            {{ r.JmenoPrijemce }}</td>
-          <td
-            class="py-4 pl-4 pr-3 text-sm font-medium text-stone-100 whitespace-nowrap sm:pl-6">
-            {{ r.Ico }}</td>
-          <td class="px-3 py-4 text-sm text-stone-500 whitespace-nowrap">{{
-          r.PodporaCzk }}</td>
-          <td class="px-3 py-4 text-sm text-stone-500 whitespace-nowrap">{{
-          r.PodporaEur }}</td>
-          <td class="px-3 py-4 text-sm text-stone-500 whitespace-nowrap">{{
-          r.PodporaDatum }}</td>
 
-        </tr>
-      </tbody>
-    </table>
   </div>
+
 </template>
 
 <script setup lang="ts">
 import {ref} from 'vue'
 
+import OutputTable from '../components/OutputTable.vue'
 import useHlidac from '../use/useHlidac'
 
-const {searchTerm, search,setToken} = useHlidac()
+const {searchTerm, searchMultiple ,setToken} = useHlidac()
 
 const results = ref<any[]>([])
 const error = ref(false)
-const totalPages = ref(0)
 const token = ref('')
-const page = ref(1)
+
+const loading = ref(false)
+
+
+const downloadResultsAsJson = () => {
+  const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(results.value));
+  const downloadAnchorNode = document.createElement('a');
+  downloadAnchorNode.setAttribute("href", dataStr);
+  downloadAnchorNode.setAttribute("download", "results.json");
+  document.body.appendChild(downloadAnchorNode); // required for firefox
+  downloadAnchorNode.click();
+  downloadAnchorNode.remove();
+}
+
 
 const handleSubmit = async (e: Event) => {
-
   error.value = false
   if(token.value.length !==32) return
+  loading.value = true
 
   e.preventDefault()
 
-  const r = await search(page.value).catch((e) => {
-    error.value = true
-    token.value = ''
-    setToken('')
-  })
+  // split by ; or ,
+  const searchTerms = searchTerm.value.split(/[,;]+/).map(s => s.trim()).filter(s => s.length > 0)
+
+try {
+  console.log('searchTerms', searchTerms);
+
+const r = await searchMultiple(searchTerms)
   // save to local storage
   localStorage.setItem('token', token.value)
-  results.value = r?.results ?? []
-  totalPages.value = r?.total ?? 0
+  results.value = r
+  // totalPages.value = r?.total ?? 0
+} catch (e) {
+     error.value = true
+    token.value = ''
+    setToken('')
 
+    return []
+}
+  loading.value = false
 }
 
 if(localStorage.getItem('token')){
